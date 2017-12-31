@@ -47,7 +47,7 @@ import bush
 from bolt import GPath, deprint
 from balt import askSave, askOpen, askWarning, showError, showWarning, \
     showInfo, Link, BusyCursor, askYes
-from exception import AbstractError
+from exception import AbstractError, BoltError, StateError
 
 opts = None # command line arguments used when launching Bash, set on bash
 
@@ -219,13 +219,53 @@ class BackupSettings(BaseBackupSettings):
 #------------------------------------------------------------------------------
 class RestoreSettings(BaseBackupSettings):
 
-    def Apply(self):
-        temp_settings_restore_dir = bolt.Path.tempDir()
+    @staticmethod
+    def restore_ini(tmp_dir):
+        backup_bash_ini = RestoreSettings.bash_ini_path(tmp_dir)
+        dest_dir = bass.dirs['mopy']
+        old_bash_ini = dest_dir.join(u'bash.ini')
+        timestamped_old = u''.join(
+            [old_bash_ini.root.s, u'(', bolt.timestamp(), u').ini'])
+        try:
+            old_bash_ini.moveTo(timestamped_old)
+        except StateError: # does not exist
+            timestamped_old = None
+        if backup_bash_ini is not None:
+            GPath(backup_bash_ini).copyTo(old_bash_ini)
+        return backup_bash_ini, timestamped_old
+
+    @staticmethod
+    def bash_ini_path(tmp_dir):
+        # search for Bash ini
+        for r, d, fs in bolt.walkdir('%s' % tmp_dir):
+            for f in fs:
+                if f == u'bash.ini':
+                    return jo(r, f)
+        return None
+
+    @staticmethod
+    def extract_backup(backup_path):
+        """Extract the backup file and return the tmp directory used. If
+        the backup file is a dir we assume it was created by us before
+        restarting."""
+        backup_path = GPath(backup_path)
+        if backup_path.isfile():
+            temp_dir = bolt.Path.tempDir(prefix=u'RestoreSettingsWryeBash_')
+            command = archives.extractCommand(backup_path, temp_dir)
+            archives.extract7z(command, backup_path)
+            return temp_dir
+        elif backup_path.isdir():
+            return backup_path
+        raise BoltError(
+            u'%s is not a valid backup location' % backup_path)
+
+    def Apply(self, backup_path=None):
+        temp_settings_restore_dir = self.extract_backup(backup_path)
         try:
             self._Apply(temp_settings_restore_dir)
         finally:
             if temp_settings_restore_dir:
-                temp_settings_restore_dir.rmtree(safety=u'WryeBash_')
+                temp_settings_restore_dir.rmtree(safety=u'RestoreSettingsWryeBash_')
 
     def incompatible_backup(self, temp_dir):
         # TODO add game check, bash.ini check
@@ -257,13 +297,8 @@ class RestoreSettings(BaseBackupSettings):
         return False
 
     def _Apply(self, temp_dir):
-        command = archives.extractCommand(self._settings_file, temp_dir)
-        archives.extract7z(command, self._settings_file)
-        if self.incompatible_backup(temp_dir): return
-
         deprint(u'')
         deprint(_(u'RESTORE BASH SETTINGS: ') + self._settings_file.s)
-
         # reinitialize bass.dirs using the backup copy of bash.ini if it exists
         game, dirs = bush.game.fsName, bass.dirs
         tmpBash = temp_dir.join(game, u'Mopy', u'bash.ini')
@@ -297,14 +332,9 @@ class RestoreSettings(BaseBackupSettings):
                     full_back_path.join(root_dir, name).copyTo(
                         saves_dir.join(root_dir, name))
 
-        # tell the user the restore is complete and warn about restart
-        self.WarnRestart()
-        if Link.Frame: # should always exist
-            Link.Frame.Destroy()
-
     @staticmethod
     def _get_backup_filename(parent, filename, do_quit):
-        if filename is None or filename.cext != u'.7z' or not filename.isfile():
+        if filename is None or (filename.isfile() and filename.cext != u'.7z'):
             # former may be None
             base_dir = bass.settings['bash.backupPath'] or bass.dirs[
                 'modsBash']
@@ -317,12 +347,3 @@ class RestoreSettings(BaseBackupSettings):
             _(u'There was an error while trying to restore your settings from '
               u'the backup file!'), _(u'No settings were restored.')]),
                     _(u'Unable to restore backup!'))
-
-    def WarnRestart(self):
-        if self.quit: return
-        showWarning(self.parent, '\n'.join([
-            _(u'Your Bash settings have been successfully restored.'),
-            _(u'Backup Path: ') + self._settings_file.s, u'',
-            _(u'Before the settings can take effect, Wrye Bash must restart.'),
-            _(u'Click OK to restart now.')]), _(u'Bash Settings Restored'))
-        Link.Frame.Restart()
