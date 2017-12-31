@@ -114,11 +114,11 @@ def cmdBackup(opts):
 
 def cmdRestore(opts):
     # restore settings on user request
-    if not opts.restore: return False
+    if not opts.restore or not opts.filename: return False # Warn!
     global basher, balt, barb
     if not basher: import basher, balt, barb
     should_quit = opts.quietquit
-    backup = barb.RestoreSettings.get_backup_instance(balt.Link.Frame,
+    backup = barb.RestoreSettings(balt.Link.Frame,
         opts.filename or None, should_quit)
     if not backup : return False
     backup.Apply()
@@ -283,9 +283,30 @@ def _main(opts):
 
     #--Bash installation directories, set on boot, not likely to change
     _init_dirs_mopy()
+    # if HTML file generation was requested, just do it and quit
+    if opts.genHtml is not None:
+        msg1 = _(u"generating HTML file from: '%s'") % opts.genHtml
+        msg2 = _(u'done')
+        try: print msg1
+        except UnicodeError: print msg1.encode(bolt.Path.sys_fs_enc)
+        import belt # this imports bosh which imports wx (DUH)
+        bolt.WryeText.genHtml(opts.genHtml)
+        try: print msg2
+        except UnicodeError: print msg2.encode(bolt.Path.sys_fs_enc)
+        return
 
-    # Read the bash.ini file and set the bashIni global in bass TODO: restore from backup !
-    bashIni = bass.GetBashIni()
+    # We need the Mopy dirs to initialize restore settings instance
+    backup_bash_ini, timestamped_old = None, None
+    # import barb that TODO: decouple from bosh/balt/bush
+    global barb
+    import barb
+    if opts.restore:
+        restore_dir = barb.RestoreSettings.extract_backup(opts.filename)
+        backup_bash_ini, timestamped_old = barb.RestoreSettings.restore_ini(
+            restore_dir)
+
+    # Read the bash.ini file and set the bashIni global in bass
+    bashIni = bass.GetBashIni(backup_bash_ini)
 
     # Detect the game we're running for ---------------------------------------
     bush_game, game_path = _import_bush_and_set_game(opts, bashIni)
@@ -295,24 +316,12 @@ def _main(opts):
     #--Initialize Directories and some settings
     #  required before the rest has imported
     SetUserPath(uArg=opts.userPath)
+    import bosh # this imports balt (DUH) which imports wx
+    bosh.initBosh(opts.personalPath, opts.localAppDataPath, bashIni)
     try:
-        import bosh # this imports balt (DUH) which imports wx
         env.isUAC = env.testUAC(game_path.join(u'Data'))
-        bosh.initBosh(opts.personalPath, opts.localAppDataPath, bashIni)
-        # if HTML file generation was requested, just do it and quit
-        if opts.genHtml is not None:
-            msg1 = _(u"generating HTML file from: '%s'") % opts.genHtml
-            msg2 = _(u'done')
-            try: print msg1
-            except UnicodeError: print msg1.encode(bolt.Path.sys_fs_enc)
-            import belt # this imports bosh which imports wx (DUH)
-            bolt.WryeText.genHtml(opts.genHtml)
-            try: print msg2
-            except UnicodeError: print msg2.encode(bolt.Path.sys_fs_enc)
-            return
-        global basher, balt, barb
+        global basher, balt
         import basher
-        import barb
         import balt
         barb.opts = opts
     except (exception.PermissionError,
