@@ -33,6 +33,7 @@ import os
 import platform
 import sys
 import traceback
+from ConfigParser import ConfigParser
 # Local
 import bass
 import exception
@@ -76,17 +77,6 @@ def SetHomePath(homePath):
     os.environ['HOMEDRIVE'] = drive
     os.environ['HOMEPATH'] = path
 
-#------------------------------------------------------------------------------
-def SetUserPath(iniPath=None, uArg=None):
-#if uArg is None, then get the UserPath from the ini file
-    if uArg:
-        SetHomePath(uArg)
-    else:
-        bashIni = bass.GetBashIni(iniPath=iniPath, reload_=iniPath is not None)
-        if bashIni and bashIni.has_option(u'General', u'sUserPath')\
-                   and not bashIni.get(u'General', u'sUserPath') == u'.':
-            SetHomePath(bashIni.get(u'General', u'sUserPath'))
-
 # Backup/Restore --------------------------------------------------------------
 def cmdBackup(opts):
     # backup settings if app version has changed or on user request
@@ -110,18 +100,6 @@ def cmdBackup(opts):
             _(u'Do you want to quit Wrye Bash now?')]),
                              title=_(u'Unable to create backup!')):
                 return True # Quit
-    return should_quit
-
-def cmdRestore(opts):
-    # restore settings on user request
-    if not opts.restore or not opts.filename: return False # Warn!
-    global basher, balt, barb
-    if not basher: import basher, balt, barb
-    should_quit = opts.quietquit
-    backup = barb.RestoreSettings(balt.Link.Frame,
-        opts.filename or None, should_quit)
-    if not backup : return False
-    backup.Apply()
     return should_quit
 
 def assure_single_instance(instance):
@@ -213,6 +191,14 @@ def dump_environment():
     print msg
     return msg
 
+def _bash_ini_parser(iniPath):
+    iniPath = iniPath or u'bash.ini'
+    bash_ini_parser = None
+    if os.path.exists(iniPath):
+        bash_ini_parser = ConfigParser()
+        bash_ini_parser.read(iniPath)
+    return bash_ini_parser
+
 # Main ------------------------------------------------------------------------
 def main(opts):
     """Run the Wrye Bash main loop.
@@ -283,6 +269,8 @@ def _main(opts):
 
     #--Bash installation directories, set on boot, not likely to change
     _init_dirs_mopy()
+    # We need the Mopy dirs to initialize restore settings instance
+
     # if HTML file generation was requested, just do it and quit
     if opts.genHtml is not None:
         msg1 = _(u"generating HTML file from: '%s'") % opts.genHtml
@@ -295,7 +283,7 @@ def _main(opts):
         except UnicodeError: print msg2.encode(bolt.Path.sys_fs_enc)
         return
 
-    # We need the Mopy dirs to initialize restore settings instance
+    # FIXME: below should be wrapped in a function and repeated if restore fails
     backup_bash_ini, timestamped_old = None, None
     # import barb that TODO: decouple from bosh/balt/bush
     global barb
@@ -306,16 +294,30 @@ def _main(opts):
             restore_dir)
 
     # Read the bash.ini file and set the bashIni global in bass
-    bashIni = bass.GetBashIni(backup_bash_ini)
+    bashIni = _bash_ini_parser(backup_bash_ini)
+    #if uArg is None, then get the UserPath from the ini file
+    if opts.userPath:
+        SetHomePath(opts.userPath)
+    elif bashIni and bashIni.has_option(u'General', u'sUserPath') \
+            and not bashIni.get(u'General', u'sUserPath') == u'.':
+        SetHomePath(bashIni.get(u'General', u'sUserPath'))
 
     # Detect the game we're running for ---------------------------------------
     bush_game, game_path = _import_bush_and_set_game(opts, bashIni)
     if not bush_game: return
     # from now on bush.game is set
+    # FIXME check backup validity now we have game
+    if opts.restore:
+        should_quit = opts.quietquit
+        backup = barb.RestoreSettings(balt.Link.Frame, opts.filename or None,
+                                      should_quit, opts.backup_images)
+        if not backup: return False
+        backup.Apply()
+        if should_quit: return
+    # FIXME finally restore old ini rinse and repeat (or?...) if restore fails
 
     #--Initialize Directories and some settings
     #  required before the rest has imported
-    SetUserPath(uArg=opts.userPath)
     import bosh # this imports balt (DUH) which imports wx
     bosh.initBosh(opts.personalPath, opts.localAppDataPath, bashIni)
     try:
@@ -323,7 +325,6 @@ def _main(opts):
         global basher, balt
         import basher
         import balt
-        barb.opts = opts
     except (exception.PermissionError,
             exception.BoltError, ImportError) as e:
         msg = u'\n'.join([_(u'Error! Unable to start Wrye Bash.'), u'\n', _(
@@ -356,7 +357,6 @@ def _main(opts):
     # process backup/restore options
     # quit if either is true, but only after calling both
     should_quit = cmdBackup(opts)
-    should_quit = cmdRestore(opts) or should_quit
     if should_quit: return
     if env.isUAC:
         uacRestart = opts.uac
