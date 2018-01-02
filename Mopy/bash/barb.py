@@ -40,7 +40,6 @@ import cPickle
 from os.path import join as jo
 
 import archives
-import bash
 import bass
 import bolt
 import bush
@@ -48,8 +47,6 @@ from bolt import GPath, deprint
 from balt import askSave, askOpen, askWarning, showError, showWarning, \
     showInfo, Link, BusyCursor, askYes
 from exception import AbstractError, BoltError, StateError
-
-opts = None # command line arguments used when launching Bash, set on bash
 
 def init_settings_files():
     """Construct a dict mapping directory paths to setting files. Keys are
@@ -262,13 +259,13 @@ class RestoreSettings(BaseBackupSettings):
     def Apply(self, backup_path=None):
         temp_settings_restore_dir = self.extract_backup(backup_path)
         try:
-            self._Apply(temp_settings_restore_dir)
+            self.restore_settings(temp_settings_restore_dir)
         finally:
             if temp_settings_restore_dir:
                 temp_settings_restore_dir.rmtree(safety=u'RestoreSettingsWryeBash_')
 
     def incompatible_backup(self, temp_dir):
-        # TODO add game check, bash.ini check
+        # TODO add game check, bash.ini check - return error message
         with temp_dir.join(u'backup.dat').open('rb') as ins:
             # version of Bash that created the backed up settings
             saved_settings_version = cPickle.load(ins)
@@ -296,18 +293,9 @@ class RestoreSettings(BaseBackupSettings):
             return True
         return False
 
-    def _Apply(self, temp_dir):
+    def restore_settings(self, temp_dir, game=None):
         deprint(u'')
         deprint(_(u'RESTORE BASH SETTINGS: ') + self._settings_file.s)
-        # reinitialize bass.dirs using the backup copy of bash.ini if it exists
-        game, dirs = bush.game.fsName, bass.dirs
-        tmpBash = temp_dir.join(game, u'Mopy', u'bash.ini')
-
-        bash.SetUserPath(tmpBash.s,opts.userPath)
-
-        bashIni = bass.GetBashIni(tmpBash.s, reload_=True)
-        import bosh
-        bosh.initBosh(opts.personalPath, opts.localAppDataPath, bashIni)
 
         # restore all the settings files
         restore_paths = init_settings_files().keys()
@@ -321,7 +309,7 @@ class RestoreSettings(BaseBackupSettings):
 
         # restore savegame profile settings
         back_path = GPath(u'My Games').join(game, u'Saves')
-        saves_dir = dirs['saveBase'].join(u'Saves')
+        saves_dir = bass.dirs['saveBase'].join(u'Saves')
         full_back_path = temp_dir.join(back_path)
         if full_back_path.exists():
             for root_dir, folders, files_ in full_back_path.walk(True,None,True):
