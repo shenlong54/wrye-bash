@@ -42,7 +42,7 @@ from collections import OrderedDict
 from functools import wraps, partial
 from itertools import imap
 #--Local
-from ..initialization import initDirs
+from ..initialization import init_dirs
 from ._mergeability import isPBashMergeable, isCBashMergeable
 from .mods_metadata import ConfigHelpers
 from .. import bass, bolt, balt, bush, env, load_order, archives
