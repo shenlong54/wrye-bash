@@ -201,7 +201,8 @@ class RestoreSettings(object):
         backup_bash_ini = RestoreSettings.bash_ini_path(tmp_dir)
         dest_dir = bass.dirs['mopy']
         old_bash_ini = dest_dir.join(u'bash.ini')
-        timestamped_old = old_bash_ini.root.s + u'(' + bolt.timestamp() + u')' + u'.ini'
+        timestamped_old = u''.join(
+            [old_bash_ini.root.s, u'(', bolt.timestamp(), u').ini'])
         try:
             old_bash_ini.moveTo(timestamped_old)
         except StateError: # does not exist

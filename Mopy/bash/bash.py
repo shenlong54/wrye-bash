@@ -37,6 +37,7 @@ from ConfigParser import ConfigParser
 # Local
 import bass
 import exception
+import initialization
 # NO OTHER LOCAL IMPORTS HERE (apart from the ones above) !
 basher = balt = barb = bolt = None
 _wx = None
@@ -261,20 +262,8 @@ def _main(opts):
     instance = _wx.SingleInstanceChecker('Wrye Bash') # must stay alive !
     assure_single_instance(instance)
 
-    # ensure we are in the correct directory so relative paths will work
-    # properly
-    if is_standalone:
-        pathToProg = os.path.dirname(
-            unicode(sys.executable, bolt.Path.sys_fs_enc))
-    else:
-        pathToProg = os.path.dirname(
-            unicode(sys.argv[0], bolt.Path.sys_fs_enc))
-    if pathToProg:
-        os.chdir(pathToProg)
-    del pathToProg
-
     #--Bash installation directories, set on boot, not likely to change
-    _init_dirs_mopy()
+    initialization.init_dirs_mopy_and_cd(is_standalone)
     # We need the Mopy dirs to initialize restore settings instance
 
     # if HTML file generation was requested, just do it and quit
@@ -291,7 +280,7 @@ def _main(opts):
 
     # FIXME: below should be wrapped in a function and repeated if restore fails
     backup_bash_ini, timestamped_old, restore_dir = None, None, None
-    # import barb that TODO: decouple from bosh/balt/bush
+    # import barb that does not import from bosh/balt/bush
     global barb
     import barb
     if opts.restore:
@@ -299,48 +288,77 @@ def _main(opts):
             restore_dir = barb.RestoreSettings.extract_backup(opts.filename)
             backup_bash_ini, timestamped_old = \
                 barb.RestoreSettings.restore_ini(restore_dir)
-        except exception.BoltError:
+        except (exception.BoltError, OSError, IOError):
             bolt.deprint(u'Failed to restore backup', traceback=True)
-
-    bashIni, bush_game, game_path = _detect_game(opts)
-    if not bush_game: return
-    # from now on bush.game is set
-    if restore_dir:
-        backup = barb.RestoreSettings(restore_dir)
-        error_msg, error_title = backup.incompatible_backup_error(
-            restore_dir, bush_game.fsName)
-        if not error_msg:
-            error_msg, error_title = backup.incompatible_backup_warn(
-                restore_dir)
-        if error_msg:
-            bolt.deprint('\n'.join(
-                [u'Failed to restore backup:', error_title, error_msg]))
-            if timestamped_old:
-                bolt.deprint(u'Restoring bash.ini')
-                bolt.GPath(timestamped_old).moveTo(
-                    bass.dirs['mopy'].join(u'bash.ini'))
-            elif backup_bash_ini:
-                # remove the Bash ini from the backup
-                bolt.GPath(u'bash.ini').remove()
-            # reset the game
-            import bush
-            bush.reset_bush_globals()
-            bashIni, bush_game, game_path = _detect_game(opts)
-            restore_dir = None
-        if opts.quietquit: return
-
-    #--Initialize Directories to perform backup/restore operations
-    import initialization
-    game_ini_path = initialization.initDirs(bashIni, opts.personalPath,
-                                            opts.localAppDataPath, bush_game,
-                                            game_path)
-    should_quit = cmdBackup(opts)
-    if restore_dir:
-        backup.restore_settings(restore_dir)
-    if should_quit or opts.quietquit: return
-    import bosh # this imports balt (DUH) which imports wx
-    bosh.initBosh(bashIni, game_ini_path)
     try:
+        bashIni, bush_game, game_path = _detect_game(opts)
+        if not bush_game: return
+        if restore_dir:
+            backup = barb.RestoreSettings(restore_dir)
+            error_msg, error_title = backup.incompatible_backup_error(
+                restore_dir, bush_game.fsName)
+            if not error_msg:
+                error_msg, error_title = backup.incompatible_backup_warn(
+                    restore_dir)
+            if error_msg:
+                bolt.deprint('\n'.join(
+                    [u'Failed to restore backup:', error_title, error_msg]))
+                if timestamped_old:
+                    bolt.deprint(u'Restoring bash.ini')
+                    bolt.GPath(timestamped_old).moveTo(
+                        bass.dirs['mopy'].join(u'bash.ini'))
+                    timestamped_old = None
+                elif backup_bash_ini:
+                    # remove bash.ini as it is the one from the backup
+                    bolt.GPath(u'bash.ini').remove()
+                # reset the game
+                import bush
+                bush.reset_bush_globals()
+                bashIni, bush_game, game_path = _detect_game(opts)
+                restore_dir = None
+        #--Initialize Directories to perform backup/restore operations
+        #--They depend on setting the bash.ini and the game
+        game_ini_path = initialization.init_dirs(bashIni, opts.personalPath,
+                                                 opts.localAppDataPath,
+                                                 bush_game, game_path)
+        # backup settings if app version has changed or on user request
+        global balt
+        import balt
+        settings_file = (opts.backup and opts.filename) or None
+        should_quit = opts.backup and opts.quietquit
+        if opts.backup or barb.new_bash_version_prompt_backup(balt):
+            frame = balt.Link.Frame
+            base_dir = bass.settings['bash.backupPath'] or bass.dirs[
+                'modsBash']
+            if not settings_file:
+                settings_file = balt.askSave(frame,
+                                             title=_(u'Backup Bash Settings'),
+                                             defaultDir=base_dir,
+                                             wildcard=u'*.7z',
+                                             defaultFile=barb.backup_filename())
+            if not settings_file: return
+            with balt.BusyCursor():
+                backup = barb.BackupSettings(settings_file)
+            try:
+                with balt.BusyCursor():
+                    backup.backup_settings(balt)
+            except exception.StateError:
+                if barb.SameAppVersion():
+                    backup.warn_message(balt)
+                elif balt.askYes(frame, u'\n'.join([_(
+                    u'There was an error while trying to backup the Bash '
+                    u'settings!'),
+                    _(
+                        u'If you continue, your current settings may be '
+                        u'overwritten.'),
+                    _(u'Do you want to quit Wrye Bash now?')]),
+                                 title=_(u'Unable to create backup!')):
+                    return True  # Quit
+        if restore_dir:
+            backup.restore_settings(restore_dir)
+        if should_quit or opts.quietquit: return
+        import bosh # this imports balt (DUH) which imports wx
+        bosh.initBosh(bashIni, game_ini_path)
         env.isUAC = env.testUAC(game_path.join(u'Data'))
         global basher, balt
         import basher
@@ -436,16 +454,6 @@ def _import_bush_and_set_game(opts, bashIni):
     # Force Python mode if CBash can't work with this game
     bolt.CBash = opts.mode if bush.game.esp.canCBash else 1 #1 = python mode...
     return bush.game, bush.gamePath
-
-def _init_dirs_mopy():
-    dirs = bass.dirs
-    dirs['mopy'] = bolt.Path.getcwd().root
-    dirs['bash'] = dirs['mopy'].join(u'bash')
-    dirs['compiled'] = dirs['bash'].join(u'compiled')
-    dirs['l10n'] = dirs['bash'].join(u'l10n')
-    dirs['db'] = dirs['bash'].join(u'db')
-    dirs['templates'] = dirs['mopy'].join(u'templates')
-    dirs['images'] = dirs['bash'].join(u'images')
 
 def _show_wx_error(msg):
     """Shows an error message in a wx window."""
