@@ -61,8 +61,8 @@ class SaveFileHeader(object):
             with save_path.open('rb') as ins:
                 self.load_header(ins)
         #--Errors
-        except (OSError, struct.error) as e:
-            bolt.deprint(u'Save file error:', traceback=True)
+        except (OSError, struct.error, OverflowError) as e:
+            bolt.deprint(u'Error in %s:' % save_path, traceback=True)
             raise SaveHeaderError, e.message, sys.exc_info()[2]
 
     def load_header(self, ins):
