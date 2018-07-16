@@ -89,7 +89,16 @@ class Settings_RestoreSettings(ItemLink):
         try:
             with balt.BusyCursor():
                 backup_dir = backup.extract_backup()
-            if backup.incompatible_backup(backup_dir): return
+            error_msg, error_title = backup.incompatible_backup_error(
+                backup_dir, bush.game.fsName)
+            if error_msg:
+                balt.showError(Link.Frame, error_msg, error_title)
+                return
+            error_msg, error_title = backup.incompatible_backup_warn(
+                backup_dir)
+            if error_msg and not balt.askWarning(Link.Frame, error_msg,
+                                                 error_title):
+                return
             restarting = True
             self._showInfo('\n'.join([
                 _(u'Your Bash settings have been successfully extracted.'),

@@ -284,37 +284,47 @@ def _main(opts):
         return
 
     # FIXME: below should be wrapped in a function and repeated if restore fails
-    backup_bash_ini, timestamped_old = None, None
+    backup_bash_ini, timestamped_old, restore_dir = None, None, None
     # import barb that TODO: decouple from bosh/balt/bush
     global barb
     import barb
     if opts.restore:
-        restore_dir = barb.RestoreSettings.extract_backup(opts.filename)
-        backup_bash_ini, timestamped_old = barb.RestoreSettings.restore_ini(
-            restore_dir)
+        try:
+            restore_dir = barb.RestoreSettings.extract_backup(opts.filename)
+            backup_bash_ini, timestamped_old = \
+                barb.RestoreSettings.restore_ini(restore_dir)
+        except exception.BoltError:
+            bolt.deprint(u'Failed to restore backup', traceback=True)
 
-    # Read the bash.ini file and set the bashIni global in bass
-    bashIni = _bash_ini_parser(backup_bash_ini)
-    #if uArg is None, then get the UserPath from the ini file
-    if opts.userPath:
-        SetHomePath(opts.userPath)
-    elif bashIni and bashIni.has_option(u'General', u'sUserPath') \
-            and not bashIni.get(u'General', u'sUserPath') == u'.':
-        SetHomePath(bashIni.get(u'General', u'sUserPath'))
-
-    # Detect the game we're running for ---------------------------------------
-    bush_game, game_path = _import_bush_and_set_game(opts, bashIni)
+    bashIni, bush_game, game_path = _detect_game(backup_bash_ini, opts)
     if not bush_game: return
     # from now on bush.game is set
-    # FIXME check backup validity now we have game
-    if opts.restore:
+    if restore_dir:
         should_quit = opts.quietquit
-        backup = barb.RestoreSettings(balt.Link.Frame, opts.filename or None,
-                                      should_quit, opts.backup_images)
-        if not backup: return False
-        backup.Apply()
+        backup = barb.RestoreSettings(balt.Link.Frame, restore_dir,
+                                      should_quit)
+        error_msg, error_title = backup.incompatible_backup_error(
+            restore_dir, bush_game.fsName)
+        if not error_msg:
+            error_msg, error_title = backup.incompatible_backup_warn(
+                restore_dir)
+        if error_msg:
+            bolt.deprint('\n'.join(
+                [u'Failed to restore backup:', error_title, error_msg]))
+            if timestamped_old:
+                bolt.deprint(u'Restoring bash.ini')
+                bolt.GPath(timestamped_old).moveTo(
+                    bass.dirs['mopy'].join(u'bash.ini'))
+            elif backup_bash_ini:
+                # remove the Bash ini from the backup
+                bolt.GPath(u'bash.ini').remove()
+            # reset the game
+            import bush
+            bush.reset_bush_globals()
+            bashIni, bush_game, game_path = _detect_game(None, opts)
+        else:
+            backup.Apply()
         if should_quit: return
-    # FIXME finally restore old ini rinse and repeat (or?...) if restore fails
 
     #--Initialize Directories and some settings
     #  required before the rest has imported
@@ -378,6 +388,20 @@ def _main(opts):
 
     app.Init() # Link.Frame is set here !
     app.MainLoop()
+
+def _detect_game(backup_bash_ini, opts):
+    # Read the bash.ini file - if no backup ini exists ignore the existing one
+    bashIni = _bash_ini_parser(backup_bash_ini)
+    # if uArg is None, then get the UserPath from the ini file
+    if opts.userPath:
+        SetHomePath(opts.userPath)
+    elif bashIni and bashIni.has_option(u'General',
+                                        u'sUserPath') and not bashIni.get(
+        u'General', u'sUserPath') == u'.':
+        SetHomePath(bashIni.get(u'General', u'sUserPath'))
+    # Detect the game we're running for ---------------------------------------
+    bush_game, game_path = _import_bush_and_set_game(opts, bashIni)
+    return bashIni, bush_game, game_path
 
 def _import_bush_and_set_game(opts, bashIni):
     import bush
