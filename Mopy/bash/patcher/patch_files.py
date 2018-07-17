@@ -80,7 +80,7 @@ class _PFile(object):
         self.mergeMods = mergeMods
         self.mergeSet = set(self.mergeMods)
         self.allMods = load_order.get_ordered(self.loadSet | self.mergeSet)
-        self.allSet = set(self.allMods)
+        self.allSet = frozenset(self.allMods)
 
     def _log_header(self, log, patch_name):
         log.setHeader((u'= %s' % patch_name) + u' ' + u'=' * 30 + u'#', True)
