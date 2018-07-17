@@ -111,7 +111,7 @@ class Settings_RestoreSettings(ItemLink):
             restarting = True
             self._showInfo('\n'.join([
                 _(u'Your Bash settings have been successfully extracted.'),
-                _(u'Backup Path: ') + backup._settings_file.s, u'',
+                _(u'Backup Path: ') + backup.settings_file.s, u'',
                 _(u'Before the settings can take effect, Wrye Bash must restart.'),
                 _(u'Click OK to restart now.')]), _(u'Bash Settings Extracted'))
             Link.Frame.Restart(['--restore'], ['--filename', backup_dir.s])
@@ -119,7 +119,7 @@ class Settings_RestoreSettings(ItemLink):
             deprint(u'Restore settings failed:', traceback=True)
             backup.warn_message(balt)
         except BoltError:
-            self._showError(u'Invalid backup path: %s' % backup._settings_file)
+            self._showError(u'Invalid backup path: %s' % backup.settings_file)
         finally:
             if not restarting and backup_dir is not None:
                 backup_dir.rmtree(safety=u'RestoreSettingsWryeBash_')

@@ -184,7 +184,7 @@ class BackupSettings(object):
 class RestoreSettings(object):
 
     def __init__(self, settings_file=None):
-        self._settings_file = settings_file
+        self.settings_file = settings_file
         self._saved_settings_version = self._settings_saved_with = None
 
     def _get_settings_versions(self, tmp_dir):
@@ -256,14 +256,13 @@ class RestoreSettings(object):
             self._get_settings_versions(temp_dir)
         if saved_settings_version > bass.settings['bash.version']:
             # Disallow restoring settings saved on a newer version of bash # TODO(ut) drop?
-            return u'\n'.join([
+            msg = u'\n'.join([
                 _(u'The data format of the selected backup file is newer than '
                   u'the current Bash version!'),
                 _(u'Backup v%s is not compatible with v%s') % (
-                    saved_settings_version, bass.settings['bash.version']),
-                u'', _(u'You cannot use this backup with this version of '
-                       u'Bash.')]), _(
-                u'Error: Settings are from newer Bash version')
+                saved_settings_version, bass.settings['bash.version']), u'', _(
+                    u'You cannot use this backup with this version of Bash.')])
+            return msg, _(u'Error: Settings are from newer Bash version')
         else:
             game_name = RestoreSettings._get_backup_game(temp_dir)
             if game_name != current_game:
@@ -289,7 +288,7 @@ class RestoreSettings(object):
 
     def _restore_settings(self, temp_dir, game=None):
         deprint(u'')
-        deprint(_(u'RESTORE BASH SETTINGS: ') + self._settings_file.s)
+        deprint(_(u'RESTORE BASH SETTINGS: ') + self.settings_file.s)
         # restore all the settings files
         restore_paths = init_settings_files().keys()
         for dest_dir, back_path in restore_paths:

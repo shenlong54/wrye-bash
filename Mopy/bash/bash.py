@@ -197,8 +197,8 @@ def dump_environment():
     print msg
     return msg
 
-def _bash_ini_parser(iniPath):
-    iniPath = iniPath or u'bash.ini'
+def _bash_ini_parser():
+    iniPath = u'bash.ini'
     bash_ini_parser = None
     if os.path.exists(iniPath):
         bash_ini_parser = ConfigParser()
@@ -302,11 +302,10 @@ def _main(opts):
         except exception.BoltError:
             bolt.deprint(u'Failed to restore backup', traceback=True)
 
-    bashIni, bush_game, game_path = _detect_game(backup_bash_ini, opts)
+    bashIni, bush_game, game_path = _detect_game(opts)
     if not bush_game: return
     # from now on bush.game is set
     if restore_dir:
-        should_quit = opts.quietquit
         backup = barb.RestoreSettings(restore_dir)
         error_msg, error_title = backup.incompatible_backup_error(
             restore_dir, bush_game.fsName)
@@ -326,10 +325,10 @@ def _main(opts):
             # reset the game
             import bush
             bush.reset_bush_globals()
-            bashIni, bush_game, game_path = _detect_game(None, opts)
+            bashIni, bush_game, game_path = _detect_game(opts)
         else:
             backup.restore_settings(restore_dir)
-        if should_quit: return
+        if opts.quietquit: return
 
     #--Initialize Directories and some settings
     #  required before the rest has imported
@@ -394,9 +393,9 @@ def _main(opts):
     app.Init() # Link.Frame is set here !
     app.MainLoop()
 
-def _detect_game(backup_bash_ini, opts):
+def _detect_game(opts):
     # Read the bash.ini file - if no backup ini exists ignore the existing one
-    bashIni = _bash_ini_parser(backup_bash_ini)
+    bashIni = _bash_ini_parser()
     # if uArg is None, then get the UserPath from the ini file
     if opts.userPath:
         SetHomePath(opts.userPath)
