@@ -96,8 +96,7 @@ def cmdBackup(opts):
         with balt.BusyCursor():
             backup = barb.BackupSettings(settings_file)
         try:
-            backup.Apply()
-            backup.backup_success(balt)
+            with balt.BusyCursor(): backup.backup_settings(balt)
         except exception.StateError:
             if barb.SameAppVersion():
                 backup.warn_message(balt)
@@ -308,7 +307,7 @@ def _main(opts):
     # from now on bush.game is set
     if restore_dir:
         should_quit = opts.quietquit
-        backup = barb.RestoreSettings(restore_dir, should_quit)
+        backup = barb.RestoreSettings(restore_dir)
         error_msg, error_title = backup.incompatible_backup_error(
             restore_dir, bush_game.fsName)
         if not error_msg:
@@ -329,7 +328,7 @@ def _main(opts):
             bush.reset_bush_globals()
             bashIni, bush_game, game_path = _detect_game(None, opts)
         else:
-            backup.Apply()
+            backup.restore_settings(restore_dir)
         if should_quit: return
 
     #--Initialize Directories and some settings

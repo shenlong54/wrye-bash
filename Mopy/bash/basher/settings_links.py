@@ -67,8 +67,7 @@ class Settings_BackupSettings(ItemLink):
         with balt.BusyCursor():
             backup = barb.BackupSettings(settings_file)
         try:
-            with balt.BusyCursor(): backup.Apply()
-            backup.backup_success(balt)
+            with balt.BusyCursor(): backup.backup_settings(balt)
         except exception.StateError:
             deprint(u'Backup settings failed', traceback=True)
             backup.warn_message(balt)
