@@ -82,18 +82,25 @@ def cmdBackup(opts):
     # backup settings if app version has changed or on user request
     global basher, balt, barb
     if not basher: import basher, balt, barb
-    path = (opts.backup and opts.filename) or None
+    settings_file = (opts.backup and opts.filename) or None
     should_quit = opts.backup and opts.quietquit
-    if barb.new_bash_version_prompt_backup() or opts.backup:
+    if opts.backup or barb.new_bash_version_prompt_backup(balt):
         frame = balt.Link.Frame
-        backup = barb.BackupSettings.get_backup_instance(frame, path,
-            should_quit)
-        if not backup: return
+        base_dir = bass.settings['bash.backupPath'] or bass.dirs['modsBash']
+        if not settings_file:
+            settings_file = balt.askSave(frame,
+                                         title=_(u'Backup Bash Settings'),
+                                         defaultDir=base_dir, wildcard=u'*.7z',
+                                         defaultFile=barb.backup_filename())
+        if not settings_file: return
+        with balt.BusyCursor():
+            backup = barb.BackupSettings(settings_file)
         try:
             backup.Apply()
+            backup.backup_success(balt)
         except exception.StateError:
             if barb.SameAppVersion():
-                backup.WarnFailed()
+                backup.warn_message(balt)
             elif balt.askYes(frame, u'\n'.join([
             _(u'There was an error while trying to backup the Bash settings!'),
             _(u'If you continue, your current settings may be overwritten.'),
@@ -301,8 +308,7 @@ def _main(opts):
     # from now on bush.game is set
     if restore_dir:
         should_quit = opts.quietquit
-        backup = barb.RestoreSettings(balt.Link.Frame, restore_dir,
-                                      should_quit)
+        backup = barb.RestoreSettings(restore_dir, should_quit)
         error_msg, error_title = backup.incompatible_backup_error(
             restore_dir, bush_game.fsName)
         if not error_msg:
