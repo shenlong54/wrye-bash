@@ -2993,19 +2993,25 @@ class InstallerProject(InstallerProject): pass
 # Initialization --------------------------------------------------------------
 from ..env import get_personal_path, get_local_app_data_path
 
+def get_path_from_ini(bash_ini_, section_key, option_key):
+    if not bash_ini_ or not bash_ini_.has_option(section_key, option_key):
+        return None
+    get_value = bash_ini_.get(section_key, option_key)
+    return GPath(get_value.strip()) if get_value != u'.' else None
+
 def getPersonalPath(bash_ini_, my_docs_path):
     #--Determine User folders from Personal and Local Application Data directories
     #  Attempt to pull from, in order: Command Line, Ini, win32com, Registry
     if my_docs_path:
         my_docs_path = GPath(my_docs_path)
         sErrorInfo = _(u"Folder path specified on command line (-p)")
-    elif bash_ini_ and bash_ini_.has_option(u'General', u'sPersonalPath') and \
-            not bash_ini_.get(u'General', u'sPersonalPath') == u'.':
-        my_docs_path = GPath(bash_ini_.get('General', 'sPersonalPath').strip())
-        sErrorInfo = _(
-            u"Folder path specified in bash.ini (%s)") % u'sPersonalPath'
     else:
-        my_docs_path, sErrorInfo = get_personal_path()
+        my_docs_path = get_path_from_ini(bash_ini_, 'General', 'sPersonalPath')
+        if my_docs_path:
+            sErrorInfo = _(
+                u"Folder path specified in bash.ini (%s)") % u'sPersonalPath'
+        else:
+            my_docs_path, sErrorInfo = get_personal_path()
     #  If path is relative, make absolute
     if not my_docs_path.isabs():
         my_docs_path = dirs['app'].join(my_docs_path)
@@ -3022,11 +3028,13 @@ def getLocalAppDataPath(bash_ini_, app_data_local_path):
     if app_data_local_path:
         app_data_local_path = GPath(app_data_local_path)
         sErrorInfo = _(u"Folder path specified on command line (-l)")
-    elif bash_ini_ and bash_ini_.has_option(u'General', u'sLocalAppDataPath') and not bash_ini_.get(u'General', u'sLocalAppDataPath') == u'.':
-        app_data_local_path = GPath(bash_ini_.get(u'General', u'sLocalAppDataPath').strip())
-        sErrorInfo = _(u"Folder path specified in bash.ini (%s)") % u'sLocalAppDataPath'
     else:
-        app_data_local_path, sErrorInfo = get_local_app_data_path()
+        app_data_local_path = get_path_from_ini(bash_ini_, u'General',
+                                                u'sLocalAppDataPath')
+        if app_data_local_path:
+            sErrorInfo = _(u"Folder path specified in bash.ini (%s)") % u'sLocalAppDataPath'
+        else:
+            app_data_local_path, sErrorInfo = get_local_app_data_path()
     #  If path is relative, make absolute
     if not app_data_local_path.isabs():
         app_data_local_path = dirs['app'].join(app_data_local_path)
@@ -3037,8 +3045,8 @@ def getLocalAppDataPath(bash_ini_, app_data_local_path):
     return app_data_local_path
 
 def getOblivionModsPath(bash_ini_):
-    if bash_ini_ and bash_ini_.has_option(u'General', u'sOblivionMods'):
-        ob_mods_path = GPath(bash_ini_.get(u'General', u'sOblivionMods').strip())
+    ob_mods_path = get_path_from_ini(bash_ini_, u'General', u'sOblivionMods')
+    if ob_mods_path:
         src = [u'[General]', u'sOblivionMods']
     else:
         ob_mods_path = GPath(GPath(u'..').join(u'%s Mods' % bush.game.fsName))
@@ -3047,8 +3055,8 @@ def getOblivionModsPath(bash_ini_):
     return ob_mods_path, src
 
 def getBainDataPath(bash_ini_):
-    if bash_ini_ and bash_ini_.has_option(u'General', u'sInstallersData'):
-        idata_path = GPath(bash_ini_.get(u'General', u'sInstallersData').strip())
+    idata_path = get_path_from_ini(bash_ini_, u'General', u'sInstallersData')
+    if idata_path:
         src = [u'[General]', u'sInstallersData']
         if not idata_path.isabs(): idata_path = dirs['app'].join(idata_path)
     else:
@@ -3057,8 +3065,8 @@ def getBainDataPath(bash_ini_):
     return idata_path, src
 
 def getBashModDataPath(bash_ini_):
-    if bash_ini_ and bash_ini_.has_option(u'General', u'sBashModData'):
-        mod_data_path = GPath(bash_ini_.get(u'General', u'sBashModData').strip())
+    mod_data_path = get_path_from_ini(bash_ini_, u'General', u'sBashModData')
+    if mod_data_path:
         if not mod_data_path.isabs():
             mod_data_path = dirs['app'].join(mod_data_path)
         src = [u'[General]', u'sBashModData']
@@ -3067,7 +3075,7 @@ def getBashModDataPath(bash_ini_):
         mod_data_path = mod_data_path.join(u'Bash Mod Data')
     return mod_data_path, src
 
-def getLegacyPath(newPath, oldPath, srcNew=None, srcOld=None):
+def getLegacyPath(newPath, oldPath):
     return (oldPath,newPath)[newPath.isdir() or not oldPath.isdir()]
 
 def getLegacyPathWithSource(newPath, oldPath, newSrc, oldSrc=None):
