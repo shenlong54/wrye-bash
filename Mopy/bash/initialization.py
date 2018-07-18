@@ -22,7 +22,6 @@
 #
 # =============================================================================
 """Functions for initializing Bash data structures on boot"""
-import balt
 import bush
 import env
 from bass import dirs
@@ -184,22 +183,6 @@ def initDirs(bashIni_, personal, localAppData):
     dirs['converters'] = dirs['installers'].join(u'Bain Converters')
     dirs['dupeBCFs'] = dirs['converters'].join(u'--Duplicates')
     dirs['corruptBCFs'] = dirs['converters'].join(u'--Corrupt')
-
-    #--Test correct permissions for the directories
-    badPermissions = [test_dir for test_dir in dirs.itervalues()
-                      if not test_permissions(test_dir)] # DOES NOTHING !!!
-    if not test_permissions(oblivionMods):
-        badPermissions.append(oblivionMods)
-    if badPermissions:
-        # Do not have all the required permissions for all directories
-        # TODO: make this gracefully degrade.  IE, if only the BAIN paths are
-        # bad, just disable BAIN.  If only the saves path is bad, just disable
-        # saves related stuff.
-        msg = balt.fill(_(u'Wrye Bash cannot access the following paths:'))
-        msg += u'\n\n' + u'\n'.join(
-            [u' * ' + bad_dir.s for bad_dir in badPermissions]) + u'\n\n'
-        msg += balt.fill(_(u'See: "Wrye Bash.html, Installation - Windows Vista/7" for information on how to solve this problem.'))
-        raise PermissionError(msg)
 
     # create bash user folders, keep these in order
     keys = ('modsBash', 'installers', 'converters', 'dupeBCFs', 'corruptBCFs',
