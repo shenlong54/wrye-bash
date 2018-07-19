@@ -21,20 +21,26 @@
 #  https://github.com/wrye-bash
 #
 # =============================================================================
-"""Functions for initializing Bash data structures on boot"""
-import bush
+"""Functions for initializing Bash data structures on boot. For now export
+functions to init bass.dirs that need be initialized high up into the boot
+sequence to be able to backup/restore settings."""
+from ConfigParser import ConfigParser
+# Local - don't import anything else
 import env
 from bass import dirs
 from bolt import GPath
-from bosh import OblivionIni, ConfigHelpers
-from env import get_personal_path, get_local_app_data_path, test_permissions
-from exception import BoltError, PermissionError, NonExistentDriveError
+from env import get_personal_path, get_local_app_data_path
+from exception import BoltError, NonExistentDriveError
 
-def get_path_from_ini(bash_ini_, section_key, option_key):
+def get_ini_option(bash_ini_, option_key, section_key=u'General'):
     if not bash_ini_ or not bash_ini_.has_option(section_key, option_key):
         return None
-    get_value = bash_ini_.get(section_key, option_key)
-    return GPath(get_value.strip()) if get_value != u'.' else None
+    return bash_ini_.get(section_key, option_key)
+
+def get_path_from_ini(bash_ini_, section_key, option_key):
+    get_value = get_ini_option(bash_ini_, option_key, section_key)
+    get_value = (get_value and get_value.strip()) or u'.'
+    return GPath(get_value) if get_value != u'.' else None
 
 def getPersonalPath(bash_ini_, my_docs_path):
     #--Determine User folders from Personal and Local Application Data directories
@@ -81,12 +87,12 @@ def getLocalAppDataPath(bash_ini_, app_data_local_path):
                         % (app_data_local_path.s, sErrorInfo))
     return app_data_local_path
 
-def getOblivionModsPath(bash_ini_):
+def getOblivionModsPath(bash_ini_, game_info):
     ob_mods_path = get_path_from_ini(bash_ini_, u'General', u'sOblivionMods')
     if ob_mods_path:
         src = [u'[General]', u'sOblivionMods']
     else:
-        ob_mods_path = GPath(GPath(u'..').join(u'%s Mods' % bush.game.fsName))
+        ob_mods_path = GPath(GPath(u'..').join(u'%s Mods' % game_info.fsName))
         src = u'Relative Path'
     if not ob_mods_path.isabs(): ob_mods_path = dirs['app'].join(ob_mods_path)
     return ob_mods_path, src
@@ -101,14 +107,14 @@ def getBainDataPath(bash_ini_):
         src = u'Relative Path'
     return idata_path, src
 
-def getBashModDataPath(bash_ini_):
+def getBashModDataPath(bash_ini_, game_info):
     mod_data_path = get_path_from_ini(bash_ini_, u'General', u'sBashModData')
     if mod_data_path:
         if not mod_data_path.isabs():
             mod_data_path = dirs['app'].join(mod_data_path)
         src = [u'[General]', u'sBashModData']
     else:
-        mod_data_path, src = getOblivionModsPath(bash_ini_)
+        mod_data_path, src = getOblivionModsPath(bash_ini_, game_info)
         mod_data_path = mod_data_path.join(u'Bash Mod Data')
     return mod_data_path, src
 
@@ -121,53 +127,51 @@ def getLegacyPathWithSource(newPath, oldPath, newSrc, oldSrc=None):
     else:
         return oldPath, oldSrc
 
-def initDirs(bashIni_, personal, localAppData):
+def initDirs(bashIni_, personal, localAppData, game_info, game_path):
     #--Oblivion (Application) Directories
-    dirs['app'] = bush.gamePath
+    dirs['app'] = game_path
     dirs['mods'] = dirs['app'].join(u'Data')
     dirs['patches'] = dirs['mods'].join(u'Bash Patches')
-    dirs['defaultPatches'] = dirs['mopy'].join(u'Bash Patches', bush.game.fsName)
+    dirs['defaultPatches'] = dirs['mopy'].join(u'Bash Patches', game_info.fsName)
     dirs['tweaks'] = dirs['mods'].join(u'INI Tweaks')
 
     #  Personal
     personal = getPersonalPath(bashIni_, personal)
-    dirs['saveBase'] = personal.join(u'My Games', bush.game.fsName)
+    dirs['saveBase'] = personal.join(u'My Games', game_info.fsName)
 
     #  Local Application Data
     localAppData = getLocalAppDataPath(bashIni_, localAppData)
-    dirs['userApp'] = localAppData.join(bush.game.fsName)
+    dirs['userApp'] = localAppData.join(game_info.fsName)
 
     # Use local copy of the oblivion.ini if present
-    global gameInis
-    global oblivionIni
-    data_oblivion_ini = dirs['app'].join(bush.game.iniFiles[0])
-    use_data_dir = False
+    # see: http://en.uesp.net/wiki/Oblivion:Ini_Settings
+    # Oblivion reads the Oblivion.ini in the directory where it exists
+    # first, and only if bUseMyGames is non-existent or set to 1 does it
+    # then look for My Documents\My Games\Oblivion.ini. In other words,
+    # both can exist simultaneously, and only the value of bUseMyGames in
+    # the Oblivion.ini directory where Oblivion.exe is run from will
+    # actually matter.
+    # Utumno: not sure how/if this applies to other games
+    game_ini_path = dirs['saveBase'].join(game_info.iniFiles[0])
+    data_oblivion_ini = dirs['app'].join(game_info.iniFiles[0])
     if data_oblivion_ini.exists():
-        oblivionIni = OblivionIni(data_oblivion_ini)
+        oblivionIni = ConfigParser(data_oblivion_ini.s)
         # is bUseMyGamesDirectory set to 0?
-        if oblivionIni.getSetting(u'General', u'bUseMyGamesDirectory', u'1') == u'0':
-            use_data_dir = True
-    if not use_data_dir: # FIXME that's what the code was doing - loaded the ini in saveBase and tried again ??
-        # oblivion.ini was not found in the game directory or
-        # bUseMyGamesDirectory was not set.  Default to user profile directory
-        oblivionIni = OblivionIni(dirs['saveBase'].join(bush.game.iniFiles[0]))
-        # is bUseMyGamesDirectory set to 0?
-        if oblivionIni.getSetting(u'General', u'bUseMyGamesDirectory', u'1') == u'0':
-            use_data_dir = True
-    if use_data_dir:
-        # Set the save game folder to the Oblivion directory
-        dirs['saveBase'] = dirs['app']
-        # Set the data folder to sLocalMasterPath
-        dirs['mods'] = dirs['app'].join(
-            oblivionIni.getSetting(u'General', u'SLocalMasterPath', u'Data'))
-        # these are relative to the mods path so they must be updated too
-        dirs['patches'] = dirs['mods'].join(u'Bash Patches')
-        dirs['tweaks'] = dirs['mods'].join(u'INI Tweaks')
-    gameInis = [oblivionIni]
-    gameInis.extend(OblivionIni(dirs['saveBase'].join(x)) for x in bush.game.iniFiles[1:])
+        use_data_dir = get_ini_option(oblivionIni,
+                                      u'bUseMyGamesDirectory') == u'0'
+        if use_data_dir:
+            game_ini_path = data_oblivion_ini
+            # Set the save game folder to the Oblivion directory
+            dirs['saveBase'] = dirs['app']
+            # Set the data folder to sLocalMasterPath
+            dirs['mods'] = dirs['app'].join(get_ini_option(oblivionIni,
+                u'SLocalMasterPath') or u'Data')
+            # these are relative to the mods path so they must be updated too
+            dirs['patches'] = dirs['mods'].join(u'Bash Patches')
+            dirs['tweaks'] = dirs['mods'].join(u'INI Tweaks')
     #--Mod Data, Installers
-    oblivionMods, oblivionModsSrc = getOblivionModsPath(bashIni_)
-    dirs['modsBash'], modsBashSrc = getBashModDataPath(bashIni_)
+    oblivionMods, oblivionModsSrc = getOblivionModsPath(bashIni_, game_info)
+    dirs['modsBash'], modsBashSrc = getBashModDataPath(bashIni_, game_info)
     dirs['modsBash'], modsBashSrc = getLegacyPathWithSource(
         dirs['modsBash'], dirs['app'].join(u'Data', u'Bash'),
         modsBashSrc, u'Relative Path')
@@ -234,7 +238,4 @@ def initDirs(bashIni_, personal, localAppData):
                              u'symbolic links or NTFS Junctions') + u':\n\n'
             msg += u'\n'.join([u'%s' % x for x in relativePathError])
         raise BoltError(msg)
-
-    # Setup LOOT API, needs to be done after the dirs are initialized
-    global configHelpers
-    configHelpers = ConfigHelpers()
+    return game_ini_path

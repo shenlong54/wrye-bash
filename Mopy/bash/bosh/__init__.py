@@ -3178,9 +3178,16 @@ def initLogFile():
                     u'initialized.') % (
                   bolt.timestamp(), inisettings['KeepLog']) + u'\r\n')
 
-def initBosh(personal=empty_path, localAppData=empty_path, bashIni=None):
-    #--Bash Ini
-    initDirs(bashIni, personal, localAppData)
+def initBosh(bashIni, game_ini_path):
+    # Setup LOOT API, needs to be done after the dirs are initialized
+    global configHelpers
+    configHelpers = ConfigHelpers()
+    # game ini files
+    global oblivionIni, gameInis
+    oblivionIni = OblivionIni(game_ini_path)
+    gameInis = [oblivionIni]
+    gameInis.extend(
+        OblivionIni(dirs['saveBase'].join(x)) for x in bush.game.iniFiles[1:])
     load_order.initialize_load_order_files()
     initOptions(bashIni)
     try:
