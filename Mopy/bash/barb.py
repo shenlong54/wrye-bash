@@ -41,43 +41,44 @@ import os
 from os.path import join as jo
 
 import archives
-import bass
+import bass # for settings (duh!)
 import bolt
-import bush
+import initialization
+from bass import dirs, AppVersion
 from bolt import GPath, deprint
 from exception import BoltError, StateError
 
-def init_settings_files():
+def _init_settings_files(fsName_):
     """Construct a dict mapping directory paths to setting files. Keys are
     tuples of absolute paths to directories, paired with the relative paths
     in the backup file. Values are sets of setting files in those paths,
     or empty, meaning we have to list those paths and backup everything."""
-    game, dirs = bush.game.fsName, bass.dirs
     settings_info = {
-        (dirs['mopy'], jo(game, u'Mopy')): {u'bash.ini', },
-        (dirs['mods'].join(u'Bash'), jo(game, u'Data', u'Bash')): {
+        (dirs['mopy'], jo(fsName_, u'Mopy')): {u'bash.ini', },
+        (dirs['mods'].join(u'Bash'), jo(fsName_, u'Data', u'Bash')): {
             u'Table.dat', },
-        (dirs['mods'].join(u'Docs'), jo(game, u'Data', u'Docs')): {
+        (dirs['mods'].join(u'Docs'), jo(fsName_, u'Data', u'Docs')): {
             u'Bash Readme Template.txt', u'Bash Readme Template.html',
             u'My Readme Template.txt', u'My Readme Template.html',
             u'wtxt_sand_small.css', u'wtxt_teal.css', },
-        (dirs['modsBash'], jo(game + u' Mods', u'Bash Mod Data')): {
+        (dirs['modsBash'], jo(fsName_ + u' Mods', u'Bash Mod Data')): {
             u'Table.dat', },
         (dirs['modsBash'].join(u'INI Data'),
-         jo(game + u' Mods', u'Bash Mod Data', u'INI Data')): {
+         jo(fsName_ + u' Mods', u'Bash Mod Data', u'INI Data')): {
            u'Table.dat', },
-        (dirs['bainData'], jo(game + u' Mods', u'Bash Installers', u'Bash')): {
+        (dirs['bainData'],
+         jo(fsName_ + u' Mods', u'Bash Installers', u'Bash')): {
            u'Converters.dat', u'Installers.dat', },
-        (dirs['saveBase'], jo(u'My Games', game)): {
+        (dirs['saveBase'], jo(u'My Games', fsName_)): {
             u'BashProfiles.dat', u'BashSettings.dat', u'BashLoadOrders.dat',
             u'People.dat', },
         # backup all files in Mopy\bash\l10n, Data\Bash Patches\ and
         # Data\INI Tweaks\
-        (dirs['l10n'], jo(game, u'Mopy', u'bash', u'l10n')): {},
+        (dirs['l10n'], jo(fsName_, u'Mopy', u'bash', u'l10n')): {},
         (dirs['mods'].join(u'Bash Patches'),
-         jo(game, u'Data', u'Bash Patches')): {},
+         jo(fsName_, u'Data', u'Bash Patches')): {},
         (dirs['mods'].join(u'INI Tweaks'),
-         jo(game, u'Data', u'INI Tweaks')): {},
+         jo(fsName_, u'Data', u'INI Tweaks')): {},
     }
     for setting_files in settings_info.itervalues():
         for settings_file in set(setting_files):
@@ -85,32 +86,29 @@ def init_settings_files():
                 setting_files.add(settings_file + u'.bak')
     return settings_info
 
-def new_bash_version_prompt_backup(balt_):
+def new_bash_version_prompt_backup(balt_, previous_bash_version):
     # return False if old version == 0 (as in not previously installed)
-    if bass.settings['bash.version'] == 0: return False
+    if previous_bash_version == 0 or AppVersion == previous_bash_version:
+        return False
     # return True if not same app version and user opts to backup settings
-    return not SameAppVersion() and balt_.askYes(balt_.Link.Frame, u'\n'.join([
+    return balt_.askYes(balt_.Link.Frame, u'\n'.join([
         _(u'A different version of Wrye Bash was previously installed.'),
-        _(u'Previous Version: ') + (u'%s' % bass.settings['bash.version']),
-        _(u'Current Version: ') + (u'%s' % bass.AppVersion),
+        _(u'Previous Version: ') + (u'%s' % previous_bash_version),
+        _(u'Current Version: ') + (u'%s' % AppVersion),
         _(u'Do you want to create a backup of your Bash settings before '
           u'they are overwritten?')]))
 
-def SameAppVersion(): return bass.AppVersion == bass.settings['bash.version']
-
-def backup_filename():
+def backup_filename(fsName_):
     return u'Backup Bash Settings %s (%s) v%s-%s.7z' % (
-        bush.game.fsName, bolt.timestamp(), bass.settings['bash.version'],
-        bass.AppVersion)
+        fsName_, bolt.timestamp(), bass.settings['bash.version'], AppVersion)
 
 #------------------------------------------------------------------------------
 class BackupSettings(object):
-    def __init__(self, settings_file):
+    def __init__(self, settings_file, fsName):
         self._settings_file = settings_file
         self.files = {}
-        game, dirs = bush.game.fsName, bass.dirs
         for (bash_dir, tmpdir), setting_files in \
-                init_settings_files().iteritems():
+                _init_settings_files(fsName).iteritems():
             if not setting_files: # we have to backup everything in there
                 setting_files = bash_dir.list()
             tmp_dir = GPath(tmpdir)
@@ -119,9 +117,8 @@ class BackupSettings(object):
                 if fpath.exists():
                     self.files[tmp_dir.join(name)] = fpath
         # backup save profile settings
-        savedir = GPath(u'My Games').join(game)
-        import bosh # FIXME(ut) - move this code out of init
-        profiles = [u''] + bosh.SaveInfos.getLocalSaveDirs()
+        savedir = GPath(u'My Games').join(fsName)
+        profiles = [u''] + initialization.getLocalSaveDirs()
         for profile in profiles:
             pluginsTxt = (u'Saves', profile, u'plugins.txt')
             loadorderTxt = (u'Saves', profile, u'loadorder.txt')
@@ -158,7 +155,7 @@ class BackupSettings(object):
             cPickle.dump(bass.settings['bash.version'], out, -1)
             # app version, if this doesn't match the installed settings
             # version, warn the user on restore
-            cPickle.dump(bass.AppVersion, out, -1)
+            cPickle.dump(AppVersion, out, -1)
         # create the backup archive in 7z format WITH solid compression
         # may raise StateError
         backup_dir, dest7z = self._settings_file.head, self._settings_file.tail
@@ -199,7 +196,7 @@ class RestoreSettings(object):
     @staticmethod
     def restore_ini(tmp_dir):
         backup_bash_ini = RestoreSettings.bash_ini_path(tmp_dir)
-        dest_dir = bass.dirs['mopy']
+        dest_dir = dirs['mopy']
         old_bash_ini = dest_dir.join(u'bash.ini')
         timestamped_old = u''.join(
             [old_bash_ini.root.s, u'(', bolt.timestamp(), u').ini'])
@@ -245,10 +242,10 @@ class RestoreSettings(object):
         raise BoltError(
             u'%s is not a valid backup location' % backup_path)
 
-    def restore_settings(self, backup_path):
+    def restore_settings(self, backup_path, fsName):
         temp_settings_restore_dir = self.extract_backup(backup_path)
         try:
-            self._restore_settings(temp_settings_restore_dir)
+            self._restore_settings(temp_settings_restore_dir, fsName)
         finally:
             if temp_settings_restore_dir:
                 temp_settings_restore_dir.rmtree(safety=u'RestoreSettingsWryeBash_')
@@ -289,11 +286,11 @@ class RestoreSettings(object):
                 u'Warning: Version Mismatch!')
         return u'', u''
 
-    def _restore_settings(self, temp_dir, game=None):
+    def _restore_settings(self, temp_dir, fsName):
         deprint(u'')
         deprint(_(u'RESTORE BASH SETTINGS: ') + self._settings_file.s)
         # restore all the settings files
-        restore_paths = init_settings_files().keys()
+        restore_paths = _init_settings_files(fsName).keys()
         for dest_dir, back_path in restore_paths:
             full_back_path = temp_dir.join(back_path)
             for name in full_back_path.list():
@@ -302,8 +299,8 @@ class RestoreSettings(object):
                         name).s + u' --> ' + dest_dir.join(name).s)
                     full_back_path.join(name).copyTo(dest_dir.join(name))
         # restore savegame profile settings
-        back_path = GPath(u'My Games').join(game, u'Saves')
-        saves_dir = bass.dirs['saveBase'].join(u'Saves')
+        back_path = GPath(u'My Games').join(fsName, u'Saves')
+        saves_dir = dirs['saveBase'].join(u'Saves')
         full_back_path = temp_dir.join(back_path)
         if full_back_path.exists():
             for root_dir, folders, files_ in full_back_path.walk(True,None,True):

@@ -260,3 +260,21 @@ def init_dirs_mopy_and_cd(is_standalone):
     dirs['db'] = dirs['bash'].join(u'db')
     dirs['templates'] = dirs['mopy'].join(u'templates')
     dirs['images'] = dirs['bash'].join(u'images')
+
+def getLocalSaveDirs():
+    """Return a list of possible local save directories, NOT including the
+    base directory."""
+    baseSaves = dirs['saveBase'].join(u'Saves')
+    # Path.list returns [] for non existent dirs
+    localSaveDirs = [x for x in baseSaves.list() if
+                     (x != u'Bash' and baseSaves.join(x).isdir())]
+    # Filter out non-encodable names
+    bad = set()
+    for folder in localSaveDirs:
+        try:
+            folder.s.encode('cp1252')
+        except UnicodeEncodeError:
+            bad.add(folder)
+    localSaveDirs = [x for x in localSaveDirs if x not in bad]
+    localSaveDirs.sort()
+    return localSaveDirs
