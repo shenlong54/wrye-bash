@@ -62,8 +62,8 @@ class Settings_BackupSettings(ItemLink):
         settings_file = balt.askSave(Link.Frame,
                                      title=_(u'Backup Bash Settings'),
                                      defaultDir=base_dir, wildcard=u'*.7z',
-                                     defaultFile=barb.backup_filename(
-                                         bush.game.fsName))
+                                     defaultFile=barb.BackupSettings.
+                                     backup_filename(bush.game.fsName))
         if not settings_file: return
         with balt.BusyCursor():
             backup = barb.BackupSettings(settings_file, bush.game.fsName)

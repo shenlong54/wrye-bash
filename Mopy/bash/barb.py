@@ -88,22 +88,6 @@ def _init_settings_files(fsName_):
                 setting_files.add(settings_file + u'.bak')
     return settings_info
 
-def new_bash_version_prompt_backup(balt_, previous_bash_version):
-    # return False if old version == 0 (as in not previously installed)
-    if previous_bash_version == 0 or AppVersion == previous_bash_version:
-        return False
-    # return True if not same app version and user opts to backup settings
-    return balt_.askYes(balt_.Link.Frame, u'\n'.join([
-        _(u'A different version of Wrye Bash was previously installed.'),
-        _(u'Previous Version: ') + (u'%s' % previous_bash_version),
-        _(u'Current Version: ') + (u'%s' % AppVersion),
-        _(u'Do you want to create a backup of your Bash settings before '
-          u'they are overwritten?')]))
-
-def backup_filename(fsName_):
-    return u'Backup Bash Settings %s (%s) v%s-%s.7z' % (
-        fsName_, bolt.timestamp(), bass.settings['bash.version'], AppVersion)
-
 #------------------------------------------------------------------------------
 class BackupSettings(object):
     def __init__(self, settings_file, fsName):
@@ -133,6 +117,25 @@ class BackupSettings(object):
             fpath = dirs['saveBase'].join(*table)
             if fpath.exists(): self.files[tpath] = fpath
             if fpath.backup.exists(): self.files[tpath.backup] = fpath.backup
+
+    @staticmethod
+    def new_bash_version_prompt_backup(balt_, previous_bash_version):
+        # return False if old version == 0 (as in not previously installed)
+        if previous_bash_version == 0 or AppVersion == previous_bash_version:
+            return False
+        # return True if not same app version and user opts to backup settings
+        return balt_.askYes(balt_.Link.Frame, u'\n'.join([
+            _(u'A different version of Wrye Bash was previously installed.'),
+            _(u'Previous Version: ') + (u'%s' % previous_bash_version),
+            _(u'Current Version: ') + (u'%s' % AppVersion),
+            _(u'Do you want to create a backup of your Bash settings before '
+              u'they are overwritten?')]))
+
+    @staticmethod
+    def backup_filename(fsName_):
+        return u'Backup Bash Settings %s (%s) v%s-%s.7z' % (
+            fsName_, bolt.timestamp(), bass.settings['bash.version'],
+            AppVersion)
 
     def backup_settings(self, balt_):
         deprint(u'')
