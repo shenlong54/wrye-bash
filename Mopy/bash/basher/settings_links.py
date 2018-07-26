@@ -82,10 +82,10 @@ class Settings_RestoreSettings(ItemLink):
 
     @balt.conversation
     def Execute(self):
-        msg = _(u'Do you want to restore your Bash settings from a backup?')
-        msg += u'\n\n' + _(u'This will force a restart of Wrye Bash once your '
-                           u'settings are restored.')
-        if not balt.askYes(Link.Frame, msg, _(u'Restore Bash Settings?')):
+        if not balt.askYes(Link.Frame, u'\n\n'.join([
+            _(u'Do you want to restore your Bash settings from a backup?'),
+            _(u'This will force a restart of Wrye Bash once your settings are '
+              u'restored.')]), _(u'Restore Bash Settings?')):
             return
         # former may be None
         base_dir = bass.settings['bash.backupPath'] or bass.dirs['modsBash']
@@ -115,7 +115,7 @@ class Settings_RestoreSettings(ItemLink):
                 _(u'Backup Path: ') + settings_file.s, u'',
                 _(u'Before the settings can take effect, Wrye Bash must restart.'),
                 _(u'Click OK to restart now.')]), _(u'Bash Settings Extracted'))
-            try:
+            try: # we currently disallow backup and restore on the same boot
                 bass.sys_argv.remove('--backup')
             except ValueError:
                 pass
@@ -125,7 +125,7 @@ class Settings_RestoreSettings(ItemLink):
             backup.warn_message(balt, e.message)
         finally:
             if not restarting and backup_dir is not None:
-                backup_dir.rmtree(safety=u'RestoreSettingsWryeBash_')
+                barb.RestoreSettings.remove_extract_dir(backup_dir)
 
 #------------------------------------------------------------------------------
 class Settings_SaveSettings(ItemLink):

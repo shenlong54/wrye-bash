@@ -195,6 +195,7 @@ class RestoreSettings(object):
     settings, which depends on the bash.ini - so this exports also functions
     to restore the backed up ini, if it exists. Restoring the settings must
     be done on boot as soon as we are able to initialize bass#dirs."""
+    __tmpdir_prefix = u'RestoreSettingsWryeBash_'
 
     def __init__(self, settings_file=None):
         self._settings_file = settings_file
@@ -229,6 +230,10 @@ class RestoreSettings(object):
         return backup_bash_ini, timestamped_old
 
     @staticmethod
+    def remove_extract_dir(backup_dir):
+        backup_dir.rmtree(safety=RestoreSettings.__tmpdir_prefix)
+
+    @staticmethod
     def _bash_ini_path(tmp_dir):
         # search for Bash ini
         for r, d, fs in bolt.walkdir('%s' % tmp_dir):
@@ -253,7 +258,7 @@ class RestoreSettings(object):
         restarting."""
         backup_path = GPath(backup_path)
         if backup_path.isfile():
-            temp_dir = bolt.Path.tempDir(prefix=u'RestoreSettingsWryeBash_')
+            temp_dir = bolt.Path.tempDir(prefix=RestoreSettings.__tmpdir_prefix)
             command = archives.extractCommand(backup_path, temp_dir)
             archives.extract7z(command, backup_path)
             return temp_dir
@@ -268,7 +273,7 @@ class RestoreSettings(object):
             self._restore_settings(temp_settings_restore_dir, fsName)
         finally:
             if temp_settings_restore_dir:
-                temp_settings_restore_dir.rmtree(safety=u'RestoreSettingsWryeBash_')
+                self.remove_extract_dir(temp_settings_restore_dir)
 
     def incompatible_backup_error(self, temp_dir, current_game):
         saved_settings_version, settings_saved_with = \
